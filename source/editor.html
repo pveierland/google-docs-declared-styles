@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+    <style>
+        body {
+            font-family: Google Sans, Roboto, sans-serif !important;
+        }
+
+        .branding-below {
+            bottom: 3rem;
+            top: 0;
+        }
+
+        .gddsButtonRow {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+            margin-bottom: 0.75rem;
+            justify-content: stretch;
+        }
+
+        .gddsButtonRow button {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            width: 100%;
+        }
+
+        .gddsHeader {
+            font-size: 125%;
+            font-weight: bold;
+            margin-bottom: 0.75rem;
+        }
+
+        .gddsHelpList {
+            padding-left: 1rem;
+        }
+
+        #gddsStyleTextarea {
+            font-family: monospace;
+            font-size: 75%;
+            line-height: 1.5;
+            overflow-wrap: normal;
+            overflow-x: scroll;
+            white-space: pre;
+            width: 100%;
+        }
+    </style>
+
+    <script>
+        const GDDS_ADDON_ID = "declared-styles";
+
+        const GDDS_HTML_STYLES = {
+            ERROR: {
+                'color': 'red',
+            },
+            NORMAL: {
+                'color': null,
+            },
+        };
+
+        const GDDS_OPTIONS = {
+            stripDefaults: {
+                default: true,
+                type: 'boolean',
+            }
+        };
+
+        function gddsEscapeHtmlString(str) {
+            return str.replace(
+                /[\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u00FF]/g,
+                c => '&#' + ('000' + c.charCodeAt(0)).slice(-4) + ';'
+            );
+        }
+
+        function gddsGetOptionsFromUserInterface() {
+            const options = Object.fromEntries(
+                Object.entries(GDDS_OPTIONS).filter(
+                    ([name, option]) => option.type === 'boolean'
+                ).map(
+                    ([name, option]) => [
+                        name,
+                        document.getElementById('gddsOption-' + name).checked,
+                    ]
+                )
+            );
+
+            return options;
+        }
+
+        async function gddsHandleLoad() {
+            google.script.run
+                .withSuccessHandler(options => gddsSetUserInterfaceOptions(options))
+                .handleOptionsGet();
+
+            google.script.run
+                .withSuccessHandler(styleIndex => gddsSetStyleSelectionState(styleIndex))
+                .storageStyleIndexGet();
+
+            gddsHandleStyleJsonGet();
+            gddsSetUserInterfaceEnabled(true);
+        }
+
+        async function gddsHandleOptionBooleanSet(element) {
+            const name = element.id.split('-')[1];
+            const value = element.checked;
+
+            gddsSetUserInterfaceEnabled(false);
+
+            google.script.run
+                .withFailureHandler(
+                    (error) => {
+                        gddsSetUserInterfaceStatus(`Option set failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .withSuccessHandler(
+                    () => {
+                        gddsSetUserInterfaceStatus("Set option", GDDS_HTML_STYLES.NORMAL, name);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .handleOptionBooleanSet(name, value);
+        }
+
+        async function gddsHandleStyleCopy() {
+            const styleObjectJson = document.getElementById('gddsStyleTextarea').value;
+            await navigator.clipboard.writeText(styleObjectJson);
+        }
+
+        function gddsHandleStyleDelete() {
+            const styleNameSelectionElement = document.getElementById('gddsStyleNameSelect');
+            const styleNameSelected = styleNameSelectionElement.value;
+
+            if (styleNameSelected) {
+                gddsSetUserInterfaceEnabled(false);
+
+                google.script.run
+                    .withFailureHandler(
+                        (error) => {
+                            gddsSetUserInterfaceStatus(`Delete failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                            gddsSetUserInterfaceEnabled(true);
+                        }
+                    )
+                    .withSuccessHandler(
+                        ({ styleIndex }) => {
+                            gddsSetStyleSelectionState(styleIndex);
+                            gddsSetUserInterfaceStatus('Deleted', GDDS_HTML_STYLES.NORMAL, styleNameSelected);
+                            gddsSetUserInterfaceEnabled(true);
+                        }
+                    )
+                    .storageStyleJsonDelete(styleNameSelected);
+            }
+        }
+
+        function gddsHandleStyleLoad() {
+            const styleNameSelectionElement = document.getElementById('gddsStyleNameSelect');
+            const styleNameSelected = styleNameSelectionElement.value;
+
+            if (styleNameSelected) {
+                gddsSetUserInterfaceEnabled(false);
+
+                google.script.run
+                    .withFailureHandler(
+                        (error) => {
+                            gddsSetUserInterfaceStatus(`Load failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                            gddsSetUserInterfaceEnabled(true);
+                        }
+                    )
+                    .withSuccessHandler(styleJson => {
+                        document.getElementById('gddsStyleTextarea').value = styleJson || "";
+                        document.getElementById('gddsStyleNameInput').value = styleJson ? styleNameSelected : "";
+
+                        if (!styleJson) {
+                            google.script.run
+                                .withSuccessHandler(
+                                    styleIndex => {
+                                        gddsSetStyleSelectionState(styleIndex);
+                                    })
+                                .storageStyleIndexGet();
+                        }
+
+                        gddsSetUserInterfaceStatus('Loaded', GDDS_HTML_STYLES.NORMAL, styleNameSelected);
+                        gddsSetUserInterfaceEnabled(true);
+                    })
+                    .storageStyleJsonGet(styleNameSelected);
+            }
+        }
+
+        function gddsHandleStyleJsonApply() {
+            gddsSetUserInterfaceEnabled(false);
+
+            google.script.run
+                .withFailureHandler(
+                    (error) => {
+                        gddsSetUserInterfaceStatus(`Apply failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .withSuccessHandler(
+                    () => {
+                        gddsSetUserInterfaceStatus('Apply completed.', GDDS_HTML_STYLES.NORMAL);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .handleStyleJsonApply(
+                    document.getElementById('gddsStyleTextarea').value,
+                    gddsGetOptionsFromUserInterface(),
+                );
+        }
+
+        function gddsHandleStyleJsonGet() {
+            gddsSetUserInterfaceEnabled(false);
+
+            google.script.run
+                .withFailureHandler(
+                    (error) => {
+                        gddsSetUserInterfaceStatus(`Get failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .withSuccessHandler(
+                    (jsonStyle) => {
+                        gddsSetUserInterfaceStatus('Get completed.', GDDS_HTML_STYLES.NORMAL);
+                        document.getElementById('gddsStyleTextarea').value = jsonStyle;
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .handleStyleJsonGet(
+                    gddsGetOptionsFromUserInterface(),
+                );
+        }
+
+        function gddsHandleStyleJsonSet() {
+            gddsSetUserInterfaceEnabled(false);
+
+            google.script.run
+                .withFailureHandler(
+                    (error) => {
+                        gddsSetUserInterfaceStatus(`Set failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .withSuccessHandler(
+                    () => {
+                        gddsSetUserInterfaceStatus('Set completed.', GDDS_HTML_STYLES.NORMAL);
+                        gddsSetUserInterfaceEnabled(true);
+                    }
+                )
+                .handleStyleJsonSet(
+                    document.getElementById('gddsStyleTextarea').value,
+                    gddsGetOptionsFromUserInterface(),
+                );
+        }
+
+        function gddsHandleStyleSave() {
+            const styleName = document.getElementById("gddsStyleNameInput").value.trim()
+
+            if (styleName) {
+                const styleJson = document.getElementById('gddsStyleTextarea').value;
+
+                gddsSetUserInterfaceEnabled(false);
+
+                google.script.run
+                    .withFailureHandler(
+                        (error) => {
+                            gddsSetUserInterfaceStatus(`Save failed: ${error}.`, GDDS_HTML_STYLES.ERROR);
+                            gddsSetUserInterfaceEnabled(true);
+                        }
+                    )
+                    .withSuccessHandler(
+                        ({ styleIndex }) => {
+                            gddsSetStyleSelectionState(styleIndex, styleName);
+                            gddsSetUserInterfaceStatus('Saved', GDDS_HTML_STYLES.NORMAL, styleName);
+                            gddsSetUserInterfaceEnabled(true);
+                        })
+                    .storageStyleJsonSet(styleName, styleJson);
+            }
+        }
+
+        function gddsSetUserInterfaceEnabled(enable) {
+            if (!enable) {
+                gddsSetUserInterfaceStatus("Loading...", GDDS_HTML_STYLES.NORMAL);
+            }
+
+            const elements = document.querySelectorAll("button,input,select,textarea");
+
+            elements.forEach(element => { element.disabled = !enable; });
+
+            const numOptions = document.querySelectorAll("#gddsStyleNameSelect option").length - 1;
+
+            if (enable && numOptions < 1) {
+                document.getElementById('gddsStyleNameSelect').disabled = true;
+                document.getElementById('gddsStyleDeleteButton').disabled = true;
+                document.getElementById('gddsStyleLoadButton').disabled = true;
+            }
+        }
+
+        function gddsSetUserInterfaceOptions(options) {
+            if (!options) {
+                return;
+            }
+
+            Object.entries(GDDS_OPTIONS).forEach(
+                ([name, option]) => {
+                    const value = options?.[name] ?? option.default;
+
+                    if (option.type === 'boolean') {
+                        document.getElementById('gddsOption-' + name).checked = value;
+                    }
+                }
+            );
+        }
+
+        function gddsSetUserInterfaceStatus(text, style, styleName) {
+            const gddsStatusMessageBeforeTextElement = document.getElementById("gddsStatusMessageBeforeText");
+            const gddsStatusMessageBodyTextElement = document.getElementById("gddsStatusMessageBodyText");
+            const gddsStatusMessageAfterTextElement = document.getElementById("gddsStatusMessageAfterText");
+
+            gddsStatusMessageBeforeTextElement.innerHTML = text ? gddsEscapeHtmlString('Status:') : '';
+            gddsStatusMessageBodyTextElement.innerHTML = text ? gddsEscapeHtmlString(text) : '';
+            gddsStatusMessageAfterTextElement.innerHTML = styleName ? gddsEscapeHtmlString(styleName) : '';
+
+            for (const [key, value] of Object.entries(style)) {
+                gddsStatusMessageBeforeTextElement.style[key] = value;
+                gddsStatusMessageBodyTextElement.style[key] = value;
+                gddsStatusMessageAfterTextElement.style[key] = value;
+            }
+
+            gddsStatusMessageBeforeTextElement.style['font-weight'] = 'bold';
+            gddsStatusMessageAfterTextElement.style['font-family'] = 'monospace';
+            gddsStatusMessageAfterTextElement.style['font-size'] = '75%';
+        }
+
+        function gddsSetStyleSelectionState(styleIndex, selectedStyleName) {
+            const styleNameSelectionElement = document.getElementById('gddsStyleNameSelect');
+            const styleNameSelectionCurrent = styleNameSelectionElement.value;
+
+            document.querySelectorAll('#gddsStyleNameSelect option').forEach(option => option.remove());
+
+            const sortedStyleNames = Object.keys(styleIndex).sort();
+            const hasOptions = sortedStyleNames.length !== 0;
+
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.text = hasOptions ? 'Select style' : 'No stored styles';
+            placeholderOption.disabled = true;
+            placeholderOption.selected = true;
+            placeholderOption.hidden = true;
+
+            styleNameSelectionElement.add(placeholderOption);
+            sortedStyleNames.forEach(styleName => styleNameSelectionElement.add(new Option(styleName)));
+
+            styleNameSelectionElement.disabled = !hasOptions;
+            document.getElementById('gddsStyleDeleteButton').disabled = !hasOptions;
+            document.getElementById('gddsStyleLoadButton').disabled = !hasOptions;
+
+            if (hasOptions) {
+                if (sortedStyleNames.includes(selectedStyleName)) {
+                    styleNameSelectionElement.value = selectedStyleName;
+                } else if (sortedStyleNames.includes(styleNameSelectionCurrent)) {
+                    styleNameSelectionElement.value = styleNameSelectionCurrent;
+                }
+            }
+        }
+    </script>
+</head>
+
+<body onload="gddsHandleLoad()">
+    <div class="sidebar branding-below">
+        <div class="block form-group">
+            <div class="gddsHeader" style="margin-top: 0.5rem;">Editor</div>
+            <textarea autocomplete="off" disabled id="gddsStyleTextarea" rows="30" spellcheck="false"></textarea>
+            <div style="margin-top: 0.25rem">
+                <span id="gddsStatusMessageBeforeText">Loading...</span>&thinsp;
+                <span id="gddsStatusMessageBodyText"></span>&thinsp;<span id="gddsStatusMessageAfterText"></span>
+            </div>
+        </div>
+
+        <div class="gddsButtonRow">
+            <button disabled id="gddsStyleGetButton" onclick="gddsHandleStyleJsonGet()">Get</button>
+            <button disabled id="gddsStyleSetButton" onclick="gddsHandleStyleJsonSet()">Set</button>
+            <button class="action" disabled id="gddsStyleApplyButton"
+                onclick="gddsHandleStyleJsonApply()">Apply</button>
+        </div>
+
+        <div class="gddsButtonRow">
+            <button disabled id="buttonStyleCopy" onclick="gddsHandleStyleCopy()">Copy to clipboard</button>
+        </div>
+
+        <div class="block">
+            <div class="gddsHeader" style="margin-top: 1.5rem;">Options</div>
+            <input disabled id="gddsOption-stripDefaults" onclick="gddsHandleOptionBooleanSet(this)" type="checkbox" />
+            <label for="gddsOption-stripDefaults">
+                Strip default values
+            </label>
+        </div>
+
+        <div class="block">
+            <div class="gddsHeader" style="margin-top: 1.5rem;">Storage</div>
+
+            <div class="gddsButtonRow">
+                <select disabled id="gddsStyleNameSelect" name="choice" style="width: 100%;"></select>
+            </div>
+
+            <div class="gddsButtonRow">
+                <button disabled id="gddsStyleDeleteButton" onclick="gddsHandleStyleDelete()">Delete</button>
+                <button disabled id="gddsStyleLoadButton" onclick="gddsHandleStyleLoad()">Load</button>
+            </div>
+
+            <div class="gddsButtonRow">
+                <input disabled id="gddsStyleNameInput" name="name" placeholder="Style name" style="flex-grow: 1"
+                    type="text" />
+            </div>
+
+            <div class="gddsButtonRow">
+                <button disabled id="buttonStyleSave" onclick="gddsHandleStyleSave()">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar bottom">
+        <span class="gray">
+            Built by <a href="https://github.com/pveierland">pveierland</a> - <a
+                href="https://github.com/pveierland/google-docs-declared-styles">Documentation</a>
+        </span>
+    </div>
+</body>
+
+</html>
