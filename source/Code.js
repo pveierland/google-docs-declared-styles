@@ -41,6 +41,12 @@ const HEADING_TYPES = [
     'NORMAL',
 ];
 
+const OPTIONS = {
+    stripDefaults: {
+        default: true,
+    },
+};
+
 const PAGE_SIZE_DETECT_EPSILON = 5.0;
 
 // Page sizes in point units:
@@ -181,6 +187,18 @@ function handleOptionBooleanSet(name, value) {
     const options = storageObjectGet("options")
     options[name] = value;
     storageObjectSet("options", options);
+}
+
+function handleOptionsGet() {
+    const options = storageObjectGet("options");
+
+    for (const [name, option] of Object.entries(OPTIONS)) {
+        if (!options.hasOwnProperty(name) && option?.default !== undefined) {
+            options[name] = options.default;
+        }
+    }
+
+    return options;
 }
 
 function handleStyleJsonApply(styleJson, options) {
