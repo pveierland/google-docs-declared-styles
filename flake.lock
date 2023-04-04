@@ -1,0 +1,40 @@
+{
+  "nodes": {
+    "google-apps-script-devshell": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "narHash": "sha256-g8FzJqlSmjccgvacRV8SSLgAyOpwtxF5anmonQl7Qi8=",
+        "type": "tarball",
+        "url": "https://api.mynixos.com/pveierland/google-apps-script-devshell/archive/main.tar.gz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://api.mynixos.com/pveierland/google-apps-script-devshell/archive/main.tar.gz"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1680487167,
+        "narHash": "sha256-9FNIqrxDZgSliGGN2XJJSvcDYmQbgOANaZA4UWnTdg4=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "53dad94e874c9586e71decf82d972dfb640ef044",
+        "type": "github"
+      },
+      "original": {
+        "id": "nixpkgs",
+        "ref": "nixpkgs-unstable",
+        "type": "indirect"
+      }
+    },
+    "root": {
+      "inputs": {
+        "google-apps-script-devshell": "google-apps-script-devshell"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
